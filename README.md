@@ -1,79 +1,207 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# GeoRemind 📍
 
-# Getting Started
+A location-based reminder Android app built with React Native and Supabase. Set a reminder at any location on the map — when you physically enter that zone, your phone notifies you automatically.
 
->**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
+**Built by:** Aditya  
+**Platform:** Android  
+**Status:** Phase 1 Complete
 
-## Step 1: Start the Metro Server
+---
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
+## The Problem
 
-To start Metro, run the following command from the _root_ of your React Native project:
+Ever walked past a shop and forgot to do something there? GeoRemind solves this — pin a location, set a radius, and get notified the moment you're nearby. No more forgetting your tasks.
 
-```bash
-# using npm
-npm start
+---
 
-# OR using Yarn
-yarn start
+## Features
+
+- 📍 Pin any location on an interactive map
+- 🔔 Automatic push notification when you enter the geofence radius
+- 🗑️ Reminder auto-deletes after it triggers (no clutter)
+- ✏️ Edit or delete reminders anytime
+- 🔐 Secure auth — each user only sees their own reminders
+- 📱 Works in background — even when app is closed
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Mobile App | React Native (TypeScript) |
+| Database + Auth | Supabase (PostgreSQL) |
+| Maps | Google Maps SDK (react-native-maps) |
+| Push Notifications | Notifee (local notifications) |
+| Background Tasks | react-native-background-fetch |
+| Navigation | React Navigation (Native Stack) |
+
+---
+
+## Architecture
+
+```
+User opens app
+      ↓
+Supabase Auth (JWT-based login/signup)
+      ↓
+HomeScreen — fetches reminders from Supabase
+      ↓
+Add Reminder — tap map to pin location + set radius
+      ↓
+Saved to Supabase (reminders table)
+      ↓
+Background task runs every 15 mins
+      ↓
+Haversine formula checks distance to each reminder
+      ↓
+Inside radius → Notifee notification + delete reminder
+      ↓
+DeviceEventEmitter → UI refreshes in real time
 ```
 
-## Step 2: Start your Application
+---
 
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
+## How Geofencing Works
 
-### For Android
+The app uses the **Haversine formula** to calculate the distance between the device's current GPS coordinates and each saved reminder's coordinates. When the distance drops below the set radius, the reminder triggers.
 
-```bash
-# using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```typescript
+function getDistanceInMetres(lat1, lon1, lat2, lon2): number {
+  const R = 6371000; // Earth's radius in metres
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 ```
 
-### For iOS
+Background checks run every **15 minutes** — the minimum interval allowed by Android/iOS to preserve battery life.
 
-```bash
-# using npm
-npm run ios
+---
 
-# OR using Yarn
-yarn ios
+## Database Schema
+
+**Table: `reminders`**
+
+| Column | Type | Description |
+|---|---|---|
+| id | uuid | Primary key (auto-generated) |
+| user_id | uuid | References auth.users |
+| title | text | Reminder label e.g. "Laundry shop" |
+| latitude | float8 | GPS latitude of pinned location |
+| longitude | float8 | GPS longitude of pinned location |
+| radius | int4 | Geofence radius in metres (10–40m) |
+| is_active | bool | True until triggered |
+| created_at | timestamptz | Creation timestamp |
+
+**Row Level Security:** All four operations (SELECT, INSERT, UPDATE, DELETE) are protected by RLS policies that check `auth.uid() = user_id`. Users can only access their own data.
+
+---
+
+## Project Structure
+
+```
+GeoRemind/
+├── src/
+│   ├── lib/
+│   │   └── supabase.ts          ← Supabase client
+│   ├── screens/
+│   │   ├── LoginScreen.tsx      ← Login/Signup UI
+│   │   ├── HomeScreen.tsx       ← Reminders list
+│   │   └── AddReminderScreen.tsx ← Add/Edit reminder with map
+│   └── utils/
+│       └── geofencing.ts        ← Haversine + background fetch logic
+├── android/
+│   └── app/
+│       └── src/main/
+│           └── AndroidManifest.xml
+├── App.tsx                      ← Entry point + navigation
+├── patches/                     ← patch-package fixes
+└── README.md
 ```
 
-If everything is set up _correctly_, you should see your new app running in your _Android Emulator_ or _iOS Simulator_ shortly provided you have set up your emulator/simulator correctly.
+---
 
-This is one way to run your app — you can also run it directly from within Android Studio and Xcode respectively.
+## Setup Instructions
 
-## Step 3: Modifying your App
+### Prerequisites
 
-Now that you have successfully run the app, let's modify it.
+- Node.js v20+
+- Java JDK 17 (not 21)
+- Android Studio + Android SDK
+- A Supabase project
+- A Google Maps API key (Maps SDK for Android)
 
-1. Open `App.tsx` in your text editor of choice and edit some lines.
-2. For **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Developer Menu** (<kbd>Ctrl</kbd> + <kbd>M</kbd> (on Window and Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (on macOS)) to see your changes!
+### Installation
 
-   For **iOS**: Hit <kbd>Cmd ⌘</kbd> + <kbd>R</kbd> in your iOS Simulator to reload the app and see your changes!
+```bash
+# Clone the repo
+git clone https://github.com/AdityaRuhela05/GeoRemind.git
+cd GeoRemind
 
-## Congratulations! :tada:
+# Install dependencies (patch-package auto-applies fixes)
+npm install
 
-You've successfully run and modified your React Native App. :partying_face:
+# Add your credentials
+# 1. Edit src/lib/supabase.ts → add your Supabase URL and anon key
+# 2. Edit android/app/src/main/AndroidManifest.xml → add your Google Maps API key
 
-### Now what?
+# Run on Android
+npx react-native run-android
+```
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [Introduction to React Native](https://reactnative.dev/docs/getting-started).
+### Environment Variables
 
-# Troubleshooting
+Create `src/lib/supabase.ts` with:
+```typescript
+const supabaseUrl = 'YOUR_SUPABASE_URL';
+const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+```
 
-If you can't get this to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+Add to `AndroidManifest.xml`:
+```xml
+<meta-data
+  android:name="com.google.android.geo.API_KEY"
+  android:value="YOUR_GOOGLE_MAPS_API_KEY"
+/>
+```
 
-# Learn More
+---
 
-To learn more about React Native, take a look at the following resources:
+## Known Fixes Applied
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+This project uses `patch-package` to fix a bug in `react-native-screens@3.29.0` where a nullable `StateWrapper?` type caused compilation failure with React Native 0.76.
+
+The patch is in `patches/react-native-screens+3.29.0.patch` and auto-applies on `npm install` via the `postinstall` script.
+
+---
+
+## Roadmap
+
+- **Phase 1** ✅ — Core geofencing reminder app
+- **Phase 2** — Repeat reminders, time + location combo triggers, battery optimisation
+- **Phase 3** — Friend proximity reminders (notify when a friend is nearby)
+- **Phase 4** — Play Store release, production APK
+
+---
+
+## What I Learned
+
+- React Native project setup, navigation, and TypeScript
+- Supabase authentication with JWT session persistence
+- PostgreSQL Row Level Security for per-user data isolation
+- The Haversine formula for GPS distance calculation
+- Android background task scheduling and battery constraints
+- patch-package for fixing third-party library bugs
+- Native Android build system (Gradle, NDK, Kotlin compatibility)
+
+---
+
+## License
+
+MIT
