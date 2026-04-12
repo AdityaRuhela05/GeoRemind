@@ -1,8 +1,7 @@
 # GeoRemind 📍
 
 A location-based reminder Android app built with React Native and Supabase. Set a reminder at any location on the map — when you physically enter that zone, your phone notifies you automatically.
-
-**Built by:** Aditya  
+ 
 **Platform:** Android  
 **Status:** Phase 1 Complete
 
