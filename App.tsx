@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from './src/lib/supabase';
 import { initGeofencing } from './src/utils/geofencing';
 import { PermissionsAndroid, Platform } from 'react-native';
+import { requestLocationPermissions } from './src/utils/permissions';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import AddReminderScreen from './src/screens/AddReminderScreen';
@@ -46,6 +47,8 @@ export default function App() {
     });
 
     initGeofencing();
+
+    requestLocationPermissions();
   }, []);
 
   if (loading) {
