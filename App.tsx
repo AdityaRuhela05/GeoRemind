@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, PermissionsAndroid, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from './src/lib/supabase';
-import { initGeofencing } from './src/utils/geofencing';
-import { PermissionsAndroid, Platform } from 'react-native';
-import { requestLocationPermissions } from './src/utils/permissions';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import AddReminderScreen from './src/screens/AddReminderScreen';
+import { initGeofencing } from './src/utils/geofencing';
 
 type RootStackParamList = {
   Login: undefined;
@@ -31,24 +29,24 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Request notification permission (Android 13+)
-    if (Platform.OS === 'android') {
-      PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-      );
-    } 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
+      // Only start geofencing once we know the user is logged in.
+      // Calling it before a session exists (or before Android is ready)
+      // can cause crashes on Android 13 and below.
+      if (session) {
+        initGeofencing().catch(e => console.error('initGeofencing failed:', e));
+      }
     });
 
     supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) {
+        // Re-init geofencing on sign-in
+        initGeofencing().catch(e => console.error('initGeofencing failed on auth change:', e));
+      }
     });
-
-    initGeofencing();
-
-    requestLocationPermissions();
   }, []);
 
   if (loading) {

@@ -12,6 +12,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { stopGeofencing, syncRemindersCache } from '../utils/geofencing';
 
 type HomeScreenProps = {
   userEmail: string;
@@ -59,14 +60,27 @@ export default function HomeScreen({ userEmail }: HomeScreenProps) {
   );
 
   useEffect(() => {
-  const subscription = DeviceEventEmitter.addListener(
-    'GEOFENCE_TRIGGERED',
-    () => {
-      fetchReminders();
-    }
-  );
-  return () => subscription.remove();
-}, []);
+    const subscription = DeviceEventEmitter.addListener(
+      'GEOFENCE_TRIGGERED',
+      (payload: { triggeredIds?: string[] }) => {
+        const ids = payload?.triggeredIds ?? [];
+        if (ids.length > 0) {
+          // Remove triggered reminders from local state immediately.
+          // Do NOT re-fetch from Supabase — the background task is deleting them
+          // there right now, and re-fetching would put them back in the cache.
+          setReminders(prev => {
+            const updated = prev.filter(r => !ids.includes(r.id));
+            syncRemindersCache(updated);
+            return updated;
+          });
+        } else {
+          // Fallback: no IDs provided, safe to re-fetch
+          fetchReminders();
+        }
+      }
+    );
+    return () => subscription.remove();
+  }, []);
 
   async function fetchReminders() {
     setLoading(true);
@@ -80,6 +94,8 @@ export default function HomeScreen({ userEmail }: HomeScreenProps) {
       Alert.alert('Error', error.message);
     } else {
       setReminders(data ?? []);
+      // Update AsyncStorage cache so background task has fresh data
+      await syncRemindersCache(data ?? []);
     }
 
     setLoading(false);
@@ -105,7 +121,10 @@ export default function HomeScreen({ userEmail }: HomeScreenProps) {
               Alert.alert('Error', error.message);
             } else {
               // Remove from local state immediately — no need to refetch
-              setReminders(prev => prev.filter(r => r.id !== id));
+              const updated = reminders.filter(r => r.id !== id);
+              setReminders(updated);
+              // Update cache so background task doesn't re-trigger deleted reminders
+              await syncRemindersCache(updated);
             }
           },
         },
@@ -114,41 +133,42 @@ export default function HomeScreen({ userEmail }: HomeScreenProps) {
   }
 
   async function handleLogout() {
+    await stopGeofencing();
     await supabase.auth.signOut();
   }
 
   // This renders each reminder card in the list
   function renderReminder({ item }: { item: Reminder }) {
-  return (
-    <View style={styles.reminderCard}>
-      <View style={styles.reminderLeft}>
-        <Text style={styles.reminderEmoji}>📍</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.reminderTitle}>{item.title}</Text>
-          <Text style={styles.reminderMeta}>
-            Radius: {item.radius} m
-          </Text>
+    return (
+      <View style={styles.reminderCard}>
+        <View style={styles.reminderLeft}>
+          <Text style={styles.reminderEmoji}>📍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.reminderTitle}>{item.title}</Text>
+            <Text style={styles.reminderMeta}>
+              Radius: {item.radius} m
+            </Text>
+          </View>
+        </View>
+
+        {/* Edit and Delete buttons */}
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => navigation.navigate('AddReminder', { reminder: item })}
+          >
+            <Text style={styles.editText}>✏️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDelete(item.id)}
+          >
+            <Text style={styles.deleteText}>🗑️</Text>
+          </TouchableOpacity>
         </View>
       </View>
-
-      {/* Edit and Delete buttons */}
-      <View style={styles.cardActions}>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => navigation.navigate('AddReminder', { reminder: item })}
-        >
-          <Text style={styles.editText}>✏️</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDelete(item.id)}
-        >
-          <Text style={styles.deleteText}>🗑️</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -196,7 +216,7 @@ export default function HomeScreen({ userEmail }: HomeScreenProps) {
           showsVerticalScrollIndicator={false}
         />
       )}
-      
+
       {/* Add Reminder Button */}
       <TouchableOpacity
         style={styles.addButton}
